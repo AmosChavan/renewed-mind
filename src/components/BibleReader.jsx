@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { supabase } from '../supabase'
 
 const TRANSLATION_IDS = {
   'NIV': '78a9f6124f344018-01',
@@ -124,34 +125,99 @@ async function fetchBiblePassage(reference, translationId) {
   return processed
 }
 
-function PassageText({ text }) {
+
+function SelectionPopup({ position, onSave, onClose }) {
+  if (!position) return null
+  return (
+    <div
+      className="fixed z-50 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 flex items-center gap-2 shadow-lg"
+      style={{ top: position.y - 45, left: position.x - 60 }}
+    >
+      <button
+        onClick={onSave}
+        className="flex items-center gap-1 hover:text-blue-300 transition-colors font-medium"
+      >
+        🔖 Save to Vault
+      </button>
+      <button onClick={onClose} className="text-gray-400 hover:text-white ml-1">✕</button>
+    </div>
+  )
+}
+
+
+function PassageText({ text, onSaveVerse }) {
+  const [popup, setPopup] = useState(null)
+  const [selectedText, setSelectedText] = useState('')
+  const [verseRange, setVerseRange] = useState('')
+
+  const handleMouseUp = () => {
+    const selection = window.getSelection()
+    const selected = selection?.toString().trim()
+
+    if (selected && selected.length > 10) {
+      const verseNumbers = selected.match(/\d+/g)
+      const firstVerse = verseNumbers?.[0]
+      const lastVerse = verseNumbers?.[verseNumbers.length - 1]
+
+      const range = selection.getRangeAt(0)
+      const rect = range.getBoundingClientRect()
+      setSelectedText(selected)
+      setVerseRange(
+        firstVerse && lastVerse && firstVerse !== lastVerse
+          ? `${firstVerse}-${lastVerse}`
+          : firstVerse || ''
+      )
+      setPopup({
+        x: rect.left + rect.width / 2,
+        y: rect.top + window.scrollY
+      })
+    } else {
+      setPopup(null)
+      setSelectedText('')
+      setVerseRange('')
+    }
+  }
+
+  const handleSave = () => {
+    onSaveVerse(selectedText, verseRange)
+    setPopup(null)
+    setSelectedText('')
+    setVerseRange('')
+    window.getSelection()?.removeAllRanges()
+  }
+
   const parts = text.split(/({{HEADING:[^}]+}}|{{VERSE:\d+}})/)
 
   return (
-    <div className="text-gray-800 text-base">
-      {parts.map((part, i) => {
-        const headingMatch = part.match(/{{HEADING:(.+)}}/)
-        const verseMatch = part.match(/{{VERSE:(\d+)}}/)
+    <>
+      <SelectionPopup
+        position={popup}
+        onSave={handleSave}
+        onClose={() => setPopup(null)}
+      />
+      <div className="text-gray-800 text-base" onMouseUp={handleMouseUp}>
+        {parts.map((part, i) => {
+          const headingMatch = part.match(/{{HEADING:(.+)}}/)
+          const verseMatch = part.match(/{{VERSE:(\d+)}}/)
 
-        if (headingMatch) {
-          return (
-            <h3 key={i} className="font-bold text-gray-900 text-lg mt-6 mb-2">
-              {headingMatch[1]}
-            </h3>
-          )
-        }
-
-        if (verseMatch) {
-          return (
-            <sup key={i} className="text-blue-500 font-bold text-xs mr-0.5 ml-1">
-              {verseMatch[1]}
-            </sup>
-          )
-        }
-
-        return <span key={i} className="leading-relaxed">{part}</span>
-      })}
-    </div>
+          if (headingMatch) {
+            return (
+              <h3 key={i} className="font-bold text-gray-900 text-lg mt-6 mb-2">
+                {headingMatch[1]}
+              </h3>
+            )
+          }
+          if (verseMatch) {
+            return (
+              <sup key={i} className="text-blue-500 font-bold text-xs mr-0.5 ml-1">
+                {verseMatch[1]}
+              </sup>
+            )
+          }
+          return <span key={i} className="leading-relaxed">{part}</span>
+        })}
+      </div>
+    </>
   )
 }
 
@@ -232,6 +298,78 @@ function ChapterPicker({ book, onSelect, onBack }) {
   )
 }
 
+function SaveModal({ verse, reference, translation, onSave, onClose }) {
+  const [ref, setRef] = useState(reference)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const handleSave = async () => {
+    setSaving(true)
+    const { data, error } = await supabase.from('memory_verses').insert({
+      reference: ref,
+      text: verse,
+      translation: translation,
+      level: 1,
+      streak: 0,
+    })
+    setSaving(false)
+    if (error) {
+      console.error('Supabase error:', error)
+      alert('Error saving: ' + error.message)
+    } else {
+      setSaved(true)
+      setTimeout(onClose, 1200)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full">
+        <h3 className="font-bold text-gray-900 text-lg mb-4">Save to Memory Vault</h3>
+
+        <div className="bg-blue-50 rounded-lg p-4 mb-4">
+          <p className="text-gray-700 text-sm italic">"{verse}"</p>
+        </div>
+
+        <div className="mb-4">
+          <label className="text-xs text-gray-500 mb-1 block">Reference</label>
+          <input
+            type="text"
+            value={ref}
+            onChange={e => setRef(e.target.value)}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div className="flex gap-3">
+          {saved ? (
+            <div className="flex-1 bg-green-50 text-green-700 text-sm font-medium py-2 rounded-lg text-center">
+              ✓ Saved to your vault!
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={onClose}
+                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {saving ? 'Saving...' : 'Save to Vault'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
 export default function BibleReader() {
   const [step, setStep] = useState('book')
   const [selectedBook, setSelectedBook] = useState(null)
@@ -240,6 +378,7 @@ export default function BibleReader() {
   const [passage, setPassage] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+  const [saveModal, setSaveModal] = useState(null)  
 
   const translations = ['NIV', 'CSB', 'NLT']
 
@@ -362,7 +501,21 @@ export default function BibleReader() {
                   {passage.translation}
                 </span>
               </div>
-              <PassageText text={passage.text} />
+              <>
+                {saveModal && (
+                  <SaveModal
+                    verse={saveModal.text}
+                    reference={`${passage.reference}:${saveModal.verseRange}`}
+                    translation={passage.translation}
+                    onSave={() => {}}
+                    onClose={() => setSaveModal(null)}
+                  />
+                )}
+                <PassageText
+                  text={passage.text}
+                  onSaveVerse={(text, verseRange) => setSaveModal({ text, verseRange })}
+                />
+              </>
             </div>
           )}
         </div>
