@@ -131,7 +131,10 @@ function SelectionPopup({ position, onSave, onClose }) {
   return (
     <div
       className="fixed z-50 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 flex items-center gap-2 shadow-lg"
-      style={{ top: position.y - 45, left: position.x - 60 }}
+      style={{
+        top: position.y - 50,
+        left: Math.min(position.x - 60, window.innerWidth - 160),
+      }}
     >
       <button
         onClick={onSave}
@@ -154,7 +157,7 @@ function PassageText({ text, onSaveVerse }) {
     const selection = window.getSelection()
     const selected = selection?.toString().trim()
 
-    if (selected && selected.length > 10) {
+    if (selected && selected.length > 3) {
       const verseNumbers = selected.match(/\d+/g)
       const firstVerse = verseNumbers?.[0]
       const lastVerse = verseNumbers?.[verseNumbers.length - 1]
@@ -169,7 +172,7 @@ function PassageText({ text, onSaveVerse }) {
       )
       setPopup({
         x: rect.left + rect.width / 2,
-        y: rect.top + window.scrollY
+        y: rect.top  // no scrollY needed for fixed positioning
       })
     } else {
       setPopup(null)
@@ -179,7 +182,8 @@ function PassageText({ text, onSaveVerse }) {
   }
 
   const handleSave = () => {
-    onSaveVerse(selectedText, verseRange)
+    const cleanText = selectedText.replace(/^\d+/, '').replace(/\s+\d+\s+/g, ' ').trim()
+    onSaveVerse(cleanText, verseRange)
     setPopup(null)
     setSelectedText('')
     setVerseRange('')
