@@ -265,104 +265,204 @@ function PassageText({ text, onSaveVerse }) {
   )
 }
 
-function BookPicker({ onSelect }) {
+function BookPicker({ onSelect, recentBooks }) {
   const [search, setSearch] = useState('')
+  const [activeTab, setActiveTab] = useState('ot')
 
-  const filtered = BOOKS.filter(b =>
-    b.name.toLowerCase().includes(search.toLowerCase())
-  )
-
-  const OT = filtered.filter(b => BOOKS.indexOf(b) < 39)
-  const NT = filtered.filter(b => BOOKS.indexOf(b) >= 39)
+  const OT = BOOKS.slice(0, 39)
+  const NT = BOOKS.slice(39)
+  const searchResults = search
+    ? BOOKS.filter(b => b.name.toLowerCase().startsWith(search.toLowerCase()))
+    : null
+  const displayBooks = searchResults || (activeTab === 'ot' ? OT : NT)
 
   return (
     <div>
-      <input
-        type="text"
-        placeholder="Search any book..."
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        className="w-full rounded-lg px-4 py-2 text-sm mb-5 focus:outline-none"
-        style={{ background: 'var(--input-bg)', border: '0.5px solid var(--border-color)', color: 'var(--text-primary)' }}
-      />
+      {/* Search + Tabs row */}
+      <div className="flex items-center gap-3 mb-4">
+        <input
+          type="text"
+          placeholder="Search any book..."
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          className="flex-1 rounded-lg px-4 py-2 text-sm focus:outline-none"
+          style={{ background: 'var(--input-bg)', border: '0.5px solid var(--border-color)', color: 'var(--text-primary)' }}
+        />
+        <div className="flex rounded-lg p-1 gap-1 flex-shrink-0" style={{ background: 'var(--pill-bg)' }}>
+          <button
+            onClick={() => { setActiveTab('ot'); setSearch('') }}
+            className="px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+            style={{
+              background: activeTab === 'ot' ? 'var(--accent)' : 'transparent',
+              color: activeTab === 'ot' ? '#FFFFFF' : 'var(--text-muted)',
+              boxShadow: activeTab === 'ot' ? '0 1px 3px rgba(0,0,0,0.2)' : 'none'
+            }}
+          >
+            Old Testament
+          </button>
+          <button
+            onClick={() => { setActiveTab('nt'); setSearch('') }}
+            className="px-3 py-1.5 rounded-md text-xs font-medium transition-all"
+            style={{
+              background: activeTab === 'nt' ? 'var(--accent)' : 'transparent',
+              color: activeTab === 'nt' ? '#FFFFFF' : 'var(--text-muted)',
+              boxShadow: activeTab === 'nt' ? '0 1px 3px rgba(0,0,0,0.2)' : 'none'
+            }}
+          >
+            New Testament
+          </button>
+        </div>
+      </div>
 
-      {OT.length > 0 && (
-        <div className="mb-5">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-xs font-bold uppercase tracking-widest whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
-              Old Testament
-            </span>
-            <div className="flex-1 h-px" style={{ background: 'var(--border-color)' }} />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {OT.map(b => (
+      {/* Recently viewed */}
+      {!search && recentBooks && recentBooks.length > 0 && (
+        <div className="mb-4">
+          <p className="text-xs font-semibold uppercase tracking-widest mb-2" style={{ color: 'var(--text-secondary)' }}>
+            Recently viewed
+          </p>
+          <div className="flex gap-2">
+            {recentBooks.map(b => (
               <button
                 key={b.name}
                 onClick={() => onSelect(b)}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
-                style={{ background: 'var(--pill-bg)', color: 'var(--text-primary)', border: '0.5px solid var(--border-color)' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-light)'; e.currentTarget.style.color = 'var(--accent-text)'; e.currentTarget.style.borderColor = 'var(--accent-text)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'var(--pill-bg)'; e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--border-color)' }}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-all"
+                style={{
+                  background: 'var(--accent-light)',
+                  color: 'var(--accent-text)',
+                  border: '0.5px solid var(--accent-text)'
+                }}
               >
-                {b.name}
+                📖 {b.name}
               </button>
             ))}
           </div>
         </div>
       )}
 
-      {NT.length > 0 && (
-        <div>
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-xs font-bold uppercase tracking-widest whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
-              New Testament
-            </span>
-            <div className="flex-1 h-px" style={{ background: 'var(--border-color)' }} />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {NT.map(b => (
-              <button
-                key={b.name}
-                onClick={() => onSelect(b)}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
-                style={{ background: 'var(--pill-bg)', color: 'var(--text-primary)', border: '0.5px solid var(--border-color)' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-light)'; e.currentTarget.style.color = 'var(--accent-text)'; e.currentTarget.style.borderColor = 'var(--accent-text)' }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'var(--pill-bg)'; e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--border-color)' }}
-              >
-                {b.name}
-              </button>
-            ))}
-          </div>
+      {/* Book list */}
+      {search && searchResults.length === 0 && (
+        <div className="text-center py-10 text-sm" style={{ color: 'var(--text-muted)' }}>
+          No books found for "{search}"
         </div>
       )}
+
+      <div className="grid grid-cols-2 gap-0.5">
+        {displayBooks.map((b, idx) => {
+          const bookIndex = BOOKS.indexOf(b)
+          const testament = bookIndex < 39 ? 'OT' : 'NT'
+          return (
+            <button
+              key={b.name}
+              onClick={() => onSelect(b)}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-all"
+              style={{ background: 'transparent' }}
+              onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-light)' }}
+              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+            >
+              <span className="text-xs font-medium w-5 text-right flex-shrink-0" style={{ color: 'var(--text-muted)' }}>
+                {bookIndex + 1}
+              </span>
+              <span className="text-sm font-medium flex-1" style={{ color: 'var(--text-primary)' }}>
+                {b.name}
+              </span>
+              {searchResults ? (
+                <span className="text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0"
+                  style={{
+                    background: testament === 'OT' ? 'var(--accent-light)' : 'var(--pill-bg)',
+                    color: testament === 'OT' ? 'var(--accent-text)' : 'var(--text-muted)',
+                    fontSize: '10px'
+                  }}
+                >
+                  {testament}
+                </span>
+              ) : (
+                <span className="text-xs flex-shrink-0" style={{ color: 'var(--text-muted)' }}>
+                  {b.chapters} ch
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
 
 
 function ChapterPicker({ book, onSelect, onBack }) {
+  const groups = []
+  for (let i = 0; i < book.chapters; i += 10) {
+    groups.push({
+      label: `CHAPTERS ${i + 1}–${Math.min(i + 10, book.chapters)}`,
+      chapters: Array.from(
+        { length: Math.min(10, book.chapters - i) },
+        (_, j) => i + j + 1
+      )
+    })
+  }
+
+  const testament = BOOKS.indexOf(book) < 39 ? 'Old Testament' : 'New Testament'
+
   return (
     <div>
-      <button onClick={onBack} className="text-sm hover:underline mb-4 flex items-center gap-1" style={{ color: 'var(--accent-text)' }}>
+      <button
+        onClick={() => { document.activeElement?.blur(); onBack() }}
+        className="text-sm hover:underline mb-5 flex items-center gap-1"
+        style={{ color: 'var(--accent-text)', outline: 'none' }}
+        onFocus={e => e.target.blur()}
+      >
         ← Back to books
       </button>
-      <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
-        {book.name} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>— select a chapter</span>
-      </p>
-      <div className="grid grid-cols-8 gap-2 sm:grid-cols-10 lg:grid-cols-12">
-        {Array.from({ length: book.chapters }, (_, i) => i + 1).map(ch => (
-          <button
-            key={ch}
-            onClick={() => onSelect(ch)}
-            className="h-10 text-sm rounded-lg transition-colors font-medium"
-            style={{ background: 'var(--pill-bg)', color: 'var(--text-primary)', border: '0.5px solid var(--border-color)' }}
-            onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-light)'; e.currentTarget.style.color = 'var(--accent-text)' }}
-            onMouseLeave={e => { e.currentTarget.style.background = 'var(--pill-bg)'; e.currentTarget.style.color = 'var(--text-primary)' }}
-          >
-            {ch}
-          </button>
-        ))}
+
+      {/* Book header */}
+      <div className="mb-6">
+        <h3 className="text-2xl font-semibold mb-1" style={{ color: 'var(--text-primary)' }}>
+          {book.name}
+        </h3>
+        <div className="w-8 h-0.5 rounded-full mb-2" style={{ background: 'var(--accent)' }} />
+        <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+          {book.chapters} chapters · {testament}
+        </p>
       </div>
+
+      {/* Chapter groups */}
+      {groups.map(group => (
+        <div key={group.label} className="mb-4">
+          <p className="text-xs font-semibold tracking-widest mb-2" style={{ color: 'var(--text-muted)' }}>
+            {group.label}
+          </p>
+          <div className="grid grid-cols-10 gap-1.5">
+            {group.chapters.map(ch => (
+              <button
+                key={ch}
+                onClick={() => onSelect(ch)}
+                className="h-10 text-sm rounded-lg font-medium transition-all"
+                style={{
+                  background: 'var(--pill-bg)',
+                  color: 'var(--text-primary)',
+                  border: '0.5px solid var(--border-color)',
+                }}
+                onMouseEnter={e => {
+                  e.currentTarget.style.background = 'var(--accent)'
+                  e.currentTarget.style.color = '#FFFFFF'
+                  e.currentTarget.style.borderColor = 'var(--accent)'
+                  e.currentTarget.style.transform = 'translateY(-1px)'
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)'
+                }}
+                onMouseLeave={e => {
+                  e.currentTarget.style.background = 'var(--pill-bg)'
+                  e.currentTarget.style.color = 'var(--text-primary)'
+                  e.currentTarget.style.borderColor = 'var(--border-color)'
+                  e.currentTarget.style.transform = 'translateY(0)'
+                  e.currentTarget.style.boxShadow = 'none'
+                }}
+              >
+                {ch}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
@@ -377,8 +477,23 @@ export default function BibleReader() {
   const [error, setError] = useState(null)
   const [saveModal, setSaveModal] = useState(null)
   const translations = ['NIV', 'CSB', 'NLT']
+  const [recentBooks, setRecentBooks] = useState(() => {
+    const stored = localStorage.getItem('rm-recent-books')
+    return stored ? JSON.parse(stored) : []
+  })
 
-  const handleBookSelect = (book) => { setSelectedBook(book); setStep('chapter') }
+  const handleBookSelect = (book) => {
+    setSelectedBook(book)
+    setStep('chapter')
+    document.activeElement?.blur()
+
+    setRecentBooks(prev => {
+      const filtered = prev.filter(b => b.name !== book.name)
+      const updated = [book, ...filtered].slice(0, 3)
+      localStorage.setItem('rm-recent-books', JSON.stringify(updated))
+      return updated
+    })
+  }
 
   const handleChapterSelect = async (chapter) => {
     setSelectedChapter(chapter)
@@ -420,19 +535,15 @@ export default function BibleReader() {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Bible Reader</h2>
-          {selectedBook && (
+          {selectedBook && step === 'passage' && (
             <p className="text-sm mt-0.5 flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
-              <button onClick={() => setStep('book')} className="hover:underline" style={{ color: 'var(--accent-text)' }}>
+              <button onClick={() => setStep('book')} className="hover:underline" style={{ color: 'var(--text-muted)' }}>
+                Books
+              </button>
+              <span style={{ color: 'var(--text-muted)' }}>›</span>
+              <button onClick={() => setStep('chapter')} className="hover:underline" style={{ color: 'var(--text-muted)' }}>
                 {selectedBook.name}
               </button>
-              {selectedChapter && (
-                <>
-                  <span style={{ color: 'var(--border-color)' }}>›</span>
-                  <button onClick={() => setStep('chapter')} className="hover:underline" style={{ color: 'var(--accent-text)' }}>
-                    Chapter {selectedChapter}
-                  </button>
-                </>
-              )}
             </p>
           )}
         </div>
@@ -454,7 +565,7 @@ export default function BibleReader() {
         </div>
       </div>
 
-      {step === 'book' && <BookPicker onSelect={handleBookSelect} />}
+      {step === 'book' && <BookPicker onSelect={handleBookSelect} recentBooks={recentBooks} />}
       {step === 'chapter' && selectedBook && (
         <ChapterPicker book={selectedBook} onSelect={handleChapterSelect} onBack={() => setStep('book')} />
       )}
@@ -484,11 +595,8 @@ export default function BibleReader() {
 
           {passage && !loading && (
             <div className="rounded-xl p-6" style={{ background: 'var(--bg-passage)', borderLeft: '3px solid var(--passage-border)' }}>
-              <div className="flex justify-between items-center mb-4">
+              <div className="mb-4">
                 <span className="font-semibold text-lg" style={{ color: 'var(--accent-text)' }}>{passage.reference}</span>
-                <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'var(--accent-light)', color: 'var(--accent-text)' }}>
-                  {passage.translation}
-                </span>
               </div>
               {saveModal && (
                 <SaveModal
@@ -498,10 +606,12 @@ export default function BibleReader() {
                   onClose={() => setSaveModal(null)}
                 />
               )}
-              <PassageText
-                text={passage.text}
-                onSaveVerse={(text, verseRange) => setSaveModal({ text, verseRange })}
-              />
+              <div className="passage-text">
+                <PassageText
+                  text={passage.text}
+                  onSaveVerse={(text, verseRange) => setSaveModal({ text, verseRange })}
+                />
+              </div>
             </div>
           )}
         </div>

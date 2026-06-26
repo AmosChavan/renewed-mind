@@ -168,3 +168,18 @@ body.dark .bg-red-50 {
 body.dark .text-red-700 {
   color: #F87171 !important;
 }
+
+h1, h2, h3, h4, h5, h6, p, span, button, label, div {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.passage-text, .passage-text * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  cursor: text;
+}
+
+body.dark .verse-num {
+  color: #6B7280 !important;
+}
