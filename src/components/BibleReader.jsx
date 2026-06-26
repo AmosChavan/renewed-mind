@@ -54,16 +54,11 @@ async function fetchBiblePassage(reference, translationId) {
     { headers: { 'api-key': API_KEY } }
   )
   const searchData = await searchRes.json()
-
-  if (!searchData.data?.passages?.length) {
-    throw new Error('Passage not found.')
-  }
+  if (!searchData.data?.passages?.length) throw new Error('Passage not found.')
 
   const combined = searchData.data.passages.map(p => p.content).join(' ')
-
   let processed = combined
 
-  // Replace all heading tags
   processed = processed.replace(
     /<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi,
     (_, inner) => {
@@ -71,8 +66,6 @@ async function fetchBiblePassage(reference, translationId) {
       return text ? `\n{{HEADING:${text}}}\n` : ''
     }
   )
-
-  // Replace heading class spans
   processed = processed.replace(
     /<span[^>]*class="[^"]*heading[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
     (_, inner) => {
@@ -80,8 +73,6 @@ async function fetchBiblePassage(reference, translationId) {
       return text ? `\n{{HEADING:${text}}}\n` : ''
     }
   )
-
-  // Replace title class spans  
   processed = processed.replace(
     /<span[^>]*class="[^"]*title[^"]*"[^>]*>([\s\S]*?)<\/span>/gi,
     (_, inner) => {
@@ -89,18 +80,12 @@ async function fetchBiblePassage(reference, translationId) {
       return text ? `\n{{HEADING:${text}}}\n` : ''
     }
   )
-
-  // Replace verse number spans
   processed = processed.replace(
     /<span[^>]*class="[^"]*v\b[^"]*"[^>]*>(\d+)<\/span>/gi,
     '{{VERSE:$1}}'
   )
-
-  // Strip all remaining HTML
   processed = processed.replace(/<[^>]*>/g, ' ')
   processed = processed.replace(/\s+/g, ' ').trim()
-
-  // Any text sitting directly before {{VERSE:1}} that isn't a verse marker is a heading
   processed = processed.replace(
     /^([^{]+?)(\{\{VERSE:1\}\})/,
     (_, before, verse) => {
@@ -108,38 +93,22 @@ async function fetchBiblePassage(reference, translationId) {
       return heading ? `{{HEADING:${heading}}}${verse}` : verse
     }
   )
-
-  // Same for headings appearing before any verse marker mid-text
-  processed = processed.replace(
-    /(\{\{VERSE:\d+\}\})\s*([A-Z][^{]{3,60}?)\s*(\{\{VERSE:\d+\}\})/g,
-    (_, v1, middle, v2) => {
-      const trimmed = middle.trim()
-      // If it looks like a title (no period, not too long), treat as heading
-      if (!trimmed.includes('.') && trimmed.length < 60) {
-        return `${v1}{{HEADING:${trimmed}}}${v2}`
-      }
-      return `${v1}${middle}${v2}`
-    }
-  )
-
   return processed
 }
-
 
 function SelectionPopup({ position, onSave, onClose }) {
   if (!position) return null
   return (
     <div
-      className="fixed z-50 bg-gray-900 text-white text-xs rounded-lg px-3 py-2 flex items-center gap-2 shadow-lg"
+      className="fixed z-50 text-xs rounded-lg px-3 py-2 flex items-center gap-2 shadow-lg"
       style={{
         top: position.y - 50,
         left: Math.min(position.x - 60, window.innerWidth - 160),
+        background: '#1E293B',
+        color: '#FFFFFF',
       }}
     >
-      <button
-        onClick={onSave}
-        className="flex items-center gap-1 hover:text-blue-300 transition-colors font-medium"
-      >
+      <button onClick={onSave} className="flex items-center gap-1 hover:text-blue-300 transition-colors font-medium">
         🔖 Save to Vault
       </button>
       <button onClick={onClose} className="text-gray-400 hover:text-white ml-1">✕</button>
@@ -147,6 +116,77 @@ function SelectionPopup({ position, onSave, onClose }) {
   )
 }
 
+function SaveModal({ verse, reference, translation, onClose }) {
+  const [ref, setRef] = useState(reference)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  const handleSave = async () => {
+    setSaving(true)
+    const { error } = await supabase.from('memory_verses').insert({
+      reference: ref,
+      text: verse,
+      translation,
+      level: 1,
+      streak: 0,
+    })
+    setSaving(false)
+    if (error) {
+      alert('Error saving: ' + error.message)
+    } else {
+      setSaved(true)
+      setTimeout(onClose, 1200)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
+      <div className="rounded-xl shadow-xl p-6 max-w-md w-full" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-color)' }}>
+        <h3 className="font-bold text-lg mb-4" style={{ color: 'var(--text-primary)' }}>Save to Memory Vault</h3>
+        <div className="rounded-lg p-4 mb-4" style={{ background: 'var(--bg-passage)' }}>
+          <p className="text-sm italic" style={{ color: 'var(--text-primary)' }}>"{verse}"</p>
+        </div>
+        <div className="mb-4">
+          <label className="text-xs mb-1 block" style={{ color: 'var(--text-muted)' }}>
+            Reference — <span style={{ color: 'var(--accent-text)' }}>edit to match exact verses</span>
+          </label>
+          <input
+            type="text"
+            value={ref}
+            onChange={e => setRef(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm focus:outline-none"
+            style={{ background: 'var(--input-bg)', border: '0.5px solid var(--border-color)', color: 'var(--text-primary)' }}
+          />
+        </div>
+        <div className="flex gap-3">
+          {saved ? (
+            <div className="flex-1 text-sm font-medium py-2 rounded-lg text-center" style={{ background: '#DCFCE7', color: '#166534' }}>
+              ✓ Saved to your vault!
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={onClose}
+                className="flex-1 py-2 rounded-lg text-sm font-medium"
+                style={{ border: '0.5px solid var(--border-color)', color: 'var(--text-secondary)', background: 'transparent' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="flex-1 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+                style={{ background: 'var(--btn-bg)', color: 'var(--btn-text)' }}
+              >
+                {saving ? 'Saving...' : 'Save to Vault'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function PassageText({ text, onSaveVerse }) {
   const [popup, setPopup] = useState(null)
@@ -160,9 +200,7 @@ function PassageText({ text, onSaveVerse }) {
     if (selected && selected.length > 3) {
       const range = selection.getRangeAt(0)
       const rect = range.getBoundingClientRect()
-
-      // Only look at superscript verse numbers in the DOM
-      const allSups = Array.from(document.querySelectorAll('sup.text-blue-500'))
+      const allSups = Array.from(document.querySelectorAll('sup.verse-num'))
 
       let startVerse = null
       let endVerse = null
@@ -170,27 +208,17 @@ function PassageText({ text, onSaveVerse }) {
       allSups.forEach(sup => {
         const supRange = document.createRange()
         supRange.selectNode(sup)
-
-        if (supRange.compareBoundaryPoints(Range.END_TO_START, range) <= 0) {
-          startVerse = sup.textContent.trim()
-        }
-
-        if (supRange.compareBoundaryPoints(Range.START_TO_END, range) <= 0) {
-          endVerse = sup.textContent.trim()
-        }
+        if (supRange.compareBoundaryPoints(Range.END_TO_START, range) <= 0) startVerse = sup.textContent.trim()
+        if (supRange.compareBoundaryPoints(Range.START_TO_END, range) <= 0) endVerse = sup.textContent.trim()
       })
 
-      const verseRef = startVerse && endVerse && 
-        parseInt(endVerse) > parseInt(startVerse)
+      const verseRef = startVerse && endVerse && parseInt(endVerse) > parseInt(startVerse)
         ? `${startVerse}-${endVerse}`
         : startVerse || ''
 
       setSelectedText(selected)
       setVerseRange(verseRef)
-      setPopup({
-        x: rect.left + rect.width / 2,
-        y: rect.top
-      })
+      setPopup({ x: rect.left + rect.width / 2, y: rect.top })
     } else {
       setPopup(null)
       setSelectedText('')
@@ -211,31 +239,26 @@ function PassageText({ text, onSaveVerse }) {
 
   return (
     <>
-      <SelectionPopup
-        position={popup}
-        onSave={handleSave}
-        onClose={() => setPopup(null)}
-      />
-      <div className="text-gray-800 text-base" onMouseUp={handleMouseUp}>
+      <SelectionPopup position={popup} onSave={handleSave} onClose={() => setPopup(null)} />
+      <div className="text-base" style={{ color: 'var(--text-primary)', lineHeight: '1.9' }} onMouseUp={handleMouseUp}>
         {parts.map((part, i) => {
           const headingMatch = part.match(/{{HEADING:(.+)}}/)
           const verseMatch = part.match(/{{VERSE:(\d+)}}/)
-
           if (headingMatch) {
             return (
-              <h3 key={i} className="font-bold text-gray-900 text-lg mt-6 mb-2">
+              <h3 key={i} className="font-bold text-lg mt-6 mb-2" style={{ color: 'var(--text-primary)' }}>
                 {headingMatch[1]}
               </h3>
             )
           }
           if (verseMatch) {
             return (
-              <sup key={i} className="text-blue-500 font-bold text-xs mr-0.5 ml-1">
+              <sup key={i} className="verse-num font-bold text-xs mr-0.5 ml-1" style={{ color: 'var(--accent-text)' }}>
                 {verseMatch[1]}
               </sup>
             )
           }
-          return <span key={i} className="leading-relaxed">{part}</span>
+          return <span key={i}>{part}</span>
         })}
       </div>
     </>
@@ -245,71 +268,96 @@ function PassageText({ text, onSaveVerse }) {
 function BookPicker({ onSelect }) {
   const [search, setSearch] = useState('')
 
-  const filter = (list) => list.filter(b =>
+  const filtered = BOOKS.filter(b =>
     b.name.toLowerCase().includes(search.toLowerCase())
   )
 
-  const BookButton = ({ book }) => (
-    <button
-      onClick={() => onSelect(book)}
-      className="text-left px-3 py-2 text-sm rounded-lg hover:bg-blue-50 hover:text-blue-700 transition-all font-medium text-gray-700"
-    >
-      {book.name}
-    </button>
-  )
+  const OT = filtered.filter(b => BOOKS.indexOf(b) < 39)
+  const NT = filtered.filter(b => BOOKS.indexOf(b) >= 39)
 
   return (
     <div>
       <input
         type="text"
-        placeholder="Search book..."
+        placeholder="Search any book..."
         value={search}
         onChange={e => setSearch(e.target.value)}
-        className="w-full border border-gray-200 rounded-lg px-4 py-2 text-sm mb-5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full rounded-lg px-4 py-2 text-sm mb-5 focus:outline-none"
+        style={{ background: 'var(--input-bg)', border: '0.5px solid var(--border-color)', color: 'var(--text-primary)' }}
       />
 
-      <div className="mb-5">
-        <div className="flex items-center gap-3 mb-3">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
-            Old Testament
-          </span>
-          <div className="flex-1 h-px bg-gray-100" />
+      {OT.length > 0 && (
+        <div className="mb-5">
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-xs font-bold uppercase tracking-widest whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
+              Old Testament
+            </span>
+            <div className="flex-1 h-px" style={{ background: 'var(--border-color)' }} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {OT.map(b => (
+              <button
+                key={b.name}
+                onClick={() => onSelect(b)}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+                style={{ background: 'var(--pill-bg)', color: 'var(--text-primary)', border: '0.5px solid var(--border-color)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-light)'; e.currentTarget.style.color = 'var(--accent-text)'; e.currentTarget.style.borderColor = 'var(--accent-text)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--pill-bg)'; e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--border-color)' }}
+              >
+                {b.name}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="grid grid-cols-4 gap-1 sm:grid-cols-6 lg:grid-cols-8">
-          {filter(OT).map(b => <BookButton key={b.name} book={b} />)}
-        </div>
-      </div>
+      )}
 
-      <div>
-        <div className="flex items-center gap-3 mb-3">
-          <span className="text-xs font-bold text-gray-400 uppercase tracking-widest whitespace-nowrap">
-            New Testament
-          </span>
-          <div className="flex-1 h-px bg-gray-100" />
+      {NT.length > 0 && (
+        <div>
+          <div className="flex items-center gap-3 mb-3">
+            <span className="text-xs font-bold uppercase tracking-widest whitespace-nowrap" style={{ color: 'var(--text-muted)' }}>
+              New Testament
+            </span>
+            <div className="flex-1 h-px" style={{ background: 'var(--border-color)' }} />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {NT.map(b => (
+              <button
+                key={b.name}
+                onClick={() => onSelect(b)}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium transition-all"
+                style={{ background: 'var(--pill-bg)', color: 'var(--text-primary)', border: '0.5px solid var(--border-color)' }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-light)'; e.currentTarget.style.color = 'var(--accent-text)'; e.currentTarget.style.borderColor = 'var(--accent-text)' }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'var(--pill-bg)'; e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--border-color)' }}
+              >
+                {b.name}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="grid grid-cols-4 gap-1 sm:grid-cols-6 lg:grid-cols-8">
-          {filter(NT).map(b => <BookButton key={b.name} book={b} />)}
-        </div>
-      </div>
+      )}
     </div>
   )
 }
 
+
 function ChapterPicker({ book, onSelect, onBack }) {
   return (
     <div>
-      <button onClick={onBack} className="text-sm text-blue-600 hover:underline mb-4 flex items-center gap-1">
+      <button onClick={onBack} className="text-sm hover:underline mb-4 flex items-center gap-1" style={{ color: 'var(--accent-text)' }}>
         ← Back to books
       </button>
-      <p className="text-sm font-semibold text-gray-700 mb-4">
-        {book.name} <span className="font-normal text-gray-400">— select a chapter</span>
+      <p className="text-sm font-semibold mb-4" style={{ color: 'var(--text-primary)' }}>
+        {book.name} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>— select a chapter</span>
       </p>
       <div className="grid grid-cols-8 gap-2 sm:grid-cols-10 lg:grid-cols-12">
         {Array.from({ length: book.chapters }, (_, i) => i + 1).map(ch => (
           <button
             key={ch}
             onClick={() => onSelect(ch)}
-            className="h-10 text-sm bg-gray-50 hover:bg-blue-100 hover:text-blue-700 rounded-lg transition-colors font-medium text-gray-700 border border-gray-200 hover:border-blue-300"
+            className="h-10 text-sm rounded-lg transition-colors font-medium"
+            style={{ background: 'var(--pill-bg)', color: 'var(--text-primary)', border: '0.5px solid var(--border-color)' }}
+            onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-light)'; e.currentTarget.style.color = 'var(--accent-text)' }}
+            onMouseLeave={e => { e.currentTarget.style.background = 'var(--pill-bg)'; e.currentTarget.style.color = 'var(--text-primary)' }}
           >
             {ch}
           </button>
@@ -319,78 +367,6 @@ function ChapterPicker({ book, onSelect, onBack }) {
   )
 }
 
-function SaveModal({ verse, reference, translation, onSave, onClose }) {
-  const [ref, setRef] = useState(reference)
-  const [saving, setSaving] = useState(false)
-  const [saved, setSaved] = useState(false)
-
-  const handleSave = async () => {
-    setSaving(true)
-    const { data, error } = await supabase.from('memory_verses').insert({
-      reference: ref,
-      text: verse,
-      translation: translation,
-      level: 1,
-      streak: 0,
-    })
-    setSaving(false)
-    if (error) {
-      console.error('Supabase error:', error)
-      alert('Error saving: ' + error.message)
-    } else {
-      setSaved(true)
-      setTimeout(onClose, 1200)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-40 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-xl shadow-xl p-6 max-w-md w-full">
-        <h3 className="font-bold text-gray-900 text-lg mb-4">Save to Memory Vault</h3>
-
-        <div className="bg-blue-50 rounded-lg p-4 mb-4">
-          <p className="text-gray-700 text-sm italic">"{verse}"</p>
-        </div>
-
-        <div className="mb-4">
-          <label className="text-xs text-gray-500 mb-1 block">Reference</label>
-          <input
-            type="text"
-            value={ref}
-            onChange={e => setRef(e.target.value)}
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div className="flex gap-3">
-          {saved ? (
-            <div className="flex-1 bg-green-50 text-green-700 text-sm font-medium py-2 rounded-lg text-center">
-              ✓ Saved to your vault!
-            </div>
-          ) : (
-            <>
-              <button
-                onClick={onClose}
-                className="flex-1 border border-gray-300 text-gray-600 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={saving}
-                className="flex-1 bg-blue-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
-              >
-                {saving ? 'Saving...' : 'Save to Vault'}
-              </button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-
 export default function BibleReader() {
   const [step, setStep] = useState('book')
   const [selectedBook, setSelectedBook] = useState(null)
@@ -399,14 +375,10 @@ export default function BibleReader() {
   const [passage, setPassage] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [saveModal, setSaveModal] = useState(null)  
-
+  const [saveModal, setSaveModal] = useState(null)
   const translations = ['NIV', 'CSB', 'NLT']
 
-  const handleBookSelect = (book) => {
-    setSelectedBook(book)
-    setStep('chapter')
-  }
+  const handleBookSelect = (book) => { setSelectedBook(book); setStep('chapter') }
 
   const handleChapterSelect = async (chapter) => {
     setSelectedChapter(chapter)
@@ -442,21 +414,21 @@ export default function BibleReader() {
   }
 
   return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6">
+    <div className="rounded-xl p-6" style={{ background: 'var(--bg-card)', border: '0.5px solid var(--border-color)' }}>
 
       {/* Header */}
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="text-lg font-semibold text-gray-800">Bible Reader</h2>
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--text-primary)' }}>Bible Reader</h2>
           {selectedBook && (
-            <p className="text-sm text-gray-400 mt-0.5 flex items-center gap-1">
-              <button onClick={() => setStep('book')} className="hover:text-blue-600 hover:underline">
+            <p className="text-sm mt-0.5 flex items-center gap-1" style={{ color: 'var(--text-muted)' }}>
+              <button onClick={() => setStep('book')} className="hover:underline" style={{ color: 'var(--accent-text)' }}>
                 {selectedBook.name}
               </button>
               {selectedChapter && (
                 <>
-                  <span className="text-gray-300">›</span>
-                  <button onClick={() => setStep('chapter')} className="hover:text-blue-600 hover:underline">
+                  <span style={{ color: 'var(--border-color)' }}>›</span>
+                  <button onClick={() => setStep('chapter')} className="hover:underline" style={{ color: 'var(--accent-text)' }}>
                     Chapter {selectedChapter}
                   </button>
                 </>
@@ -470,11 +442,11 @@ export default function BibleReader() {
             <button
               key={t}
               onClick={() => handleTranslationChange(t)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
-                translation === t
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
+              className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
+              style={{
+                background: translation === t ? 'var(--pill-active-bg)' : 'var(--pill-bg)',
+                color: translation === t ? 'var(--pill-active-text)' : 'var(--pill-text)',
+              }}
             >
               {t}
             </button>
@@ -483,60 +455,53 @@ export default function BibleReader() {
       </div>
 
       {step === 'book' && <BookPicker onSelect={handleBookSelect} />}
-
       {step === 'chapter' && selectedBook && (
-        <ChapterPicker
-          book={selectedBook}
-          onSelect={handleChapterSelect}
-          onBack={() => setStep('book')}
-        />
+        <ChapterPicker book={selectedBook} onSelect={handleChapterSelect} onBack={() => setStep('book')} />
       )}
 
       {step === 'passage' && (
         <div>
           <button
             onClick={() => setStep('chapter')}
-            className="text-sm text-blue-600 hover:underline mb-4 flex items-center gap-1"
+            className="text-sm hover:underline mb-4 flex items-center gap-1"
+            style={{ color: 'var(--accent-text)' }}
           >
             ← Back to chapters
           </button>
 
           {loading && (
-            <div className="text-center py-16 text-gray-400">
+            <div className="text-center py-16" style={{ color: 'var(--text-muted)' }}>
               <div className="text-2xl mb-2">📖</div>
               <p className="text-sm">Loading passage...</p>
             </div>
           )}
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+            <div className="rounded-lg px-4 py-3 text-sm" style={{ background: '#FEF2F2', color: '#991B1B', border: '0.5px solid #FECACA' }}>
               {error}
             </div>
           )}
 
           {passage && !loading && (
-            <div className="bg-blue-50 rounded-lg p-6">
+            <div className="rounded-xl p-6" style={{ background: 'var(--bg-passage)', borderLeft: '3px solid var(--passage-border)' }}>
               <div className="flex justify-between items-center mb-4">
-                <span className="font-semibold text-blue-900 text-lg">{passage.reference}</span>
-                <span className="text-xs bg-blue-200 text-blue-800 px-2 py-1 rounded-full">
+                <span className="font-semibold text-lg" style={{ color: 'var(--accent-text)' }}>{passage.reference}</span>
+                <span className="text-xs px-2 py-1 rounded-full" style={{ background: 'var(--accent-light)', color: 'var(--accent-text)' }}>
                   {passage.translation}
                 </span>
               </div>
-              <>
-                {saveModal && (
-                  <SaveModal
-                    verse={saveModal.text}
-                    reference={`${passage.reference}:${saveModal.verseRange}`}
-                    translation={passage.translation}
-                    onSave={() => {}}
-                    onClose={() => setSaveModal(null)}
-                  />
-                )}
-                <PassageText
-                  text={passage.text}
-                  onSaveVerse={(text, verseRange) => setSaveModal({ text, verseRange })}
+              {saveModal && (
+                <SaveModal
+                  verse={saveModal.text}
+                  reference={`${passage.reference}:${saveModal.verseRange}`}
+                  translation={passage.translation}
+                  onClose={() => setSaveModal(null)}
                 />
-              </>
+              )}
+              <PassageText
+                text={passage.text}
+                onSaveVerse={(text, verseRange) => setSaveModal({ text, verseRange })}
+              />
             </div>
           )}
         </div>
