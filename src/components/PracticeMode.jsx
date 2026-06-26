@@ -24,6 +24,7 @@ function Level2({ verse, onNext }) {
   const [inputs, setInputs] = useState({})
   const [checked, setChecked] = useState(false)
   const [score, setScore] = useState(null)
+  const [showVerse, setShowVerse] = useState(false)
 
   const normalize = str => str.toLowerCase().replace(/[^a-z]/g, '')
 
@@ -101,9 +102,20 @@ function Level2({ verse, onNext }) {
       )}
 
       {checked && (
-        <div className="bg-blue-50 rounded-lg p-4 mb-4">
-          <p className="text-xs text-gray-400 mb-1">Full verse:</p>
-          <p className="text-gray-700 text-sm italic">"{verse.text}"</p>
+        <div className="mb-4">
+          {showVerse ? (
+            <div className="bg-blue-50 rounded-lg p-4">
+              <p className="text-xs text-gray-400 mb-1">Full verse:</p>
+              <p className="text-gray-700 text-sm italic">"{verse.text}"</p>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowVerse(true)}
+              className="w-full border border-blue-200 text-blue-600 py-2 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors"
+            >
+              Show verse
+            </button>
+          )}
         </div>
       )}
 
@@ -113,6 +125,7 @@ function Level2({ verse, onNext }) {
             setInputs({})
             setChecked(false)
             setScore(null)
+            setShowVerse(false)
           }}
           className="flex-1 bg-gray-100 text-gray-600 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
         >
@@ -143,22 +156,43 @@ function Level2({ verse, onNext }) {
 
 function Level3({ verse, onNext }) {
   const [input, setInput] = useState('')
+  const [refInput, setRefInput] = useState('')
   const [result, setResult] = useState(null)
+  const [showVerse, setShowVerse] = useState(false)
 
   const checkAnswer = () => {
     const normalize = str => str.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim()
+    
+    // Check verse text
     const correct = normalize(verse.text)
     const attempt = normalize(input)
     const correctWords = correct.split(' ')
     const attemptWords = attempt.split(' ')
-    const matches = correctWords.filter((word, i) => word === attemptWords[i]).length
-    const score = Math.round((matches / correctWords.length) * 100)
-    setResult({ score, correct: score >= 80 })
+    const wordMatches = correctWords.filter((word, i) => word === attemptWords[i]).length
+    const verseScore = Math.round((wordMatches / correctWords.length) * 100)
+
+    // Check reference
+    const correctRef = normalize(verse.reference)
+    const attemptRef = normalize(refInput)
+    const refCorrect = correctRef === attemptRef
+
+    const overallScore = refCorrect
+      ? verseScore
+      : Math.round(verseScore * 0.8) // penalize if reference is wrong
+
+    setResult({
+      verseScore,
+      refCorrect,
+      overallScore,
+      correct: overallScore >= 80 && refCorrect
+    })
   }
 
   const handleRetry = () => {
     setInput('')
+    setRefInput('')
     setResult(null)
+    setShowVerse(false)
   }
 
   if (result) {
@@ -168,11 +202,37 @@ function Level3({ verse, onNext }) {
         <h3 className={`text-2xl font-bold mb-2 ${result.correct ? 'text-green-600' : 'text-orange-500'}`}>
           {result.correct ? 'Great job!' : 'Almost there!'}
         </h3>
-        <p className="text-gray-500 mb-6">You got {result.score}% correct</p>
-        <div className="bg-blue-50 rounded-xl p-6 mb-8 text-left">
-          <p className="text-xs text-gray-400 mb-2">Correct verse:</p>
-          <p className="text-gray-800 italic">"{verse.text}"</p>
+
+        <div className="flex gap-4 justify-center mb-6">
+          <div className={`px-4 py-2 rounded-lg text-sm font-medium ${
+            result.verseScore >= 80 ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-600'
+          }`}>
+            Verse: {result.verseScore}%
+          </div>
+          <div className={`px-4 py-2 rounded-lg text-sm font-medium ${
+            result.refCorrect ? 'bg-green-50 text-green-700' : 'bg-orange-50 text-orange-600'
+          }`}>
+            Reference: {result.refCorrect ? '✓ Correct' : `✗ It's ${verse.reference}`}
+          </div>
         </div>
+
+        <div className="mb-6">
+          {showVerse ? (
+            <div className="bg-blue-50 rounded-xl p-6 text-left">
+              <p className="text-xs text-gray-400 mb-2">Correct verse:</p>
+              <p className="text-gray-800 italic">"{verse.text}"</p>
+              <p className="text-blue-600 font-semibold mt-2">{verse.reference}</p>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowVerse(true)}
+              className="w-full border border-blue-200 text-blue-600 py-2 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors"
+            >
+              Show verse
+            </button>
+          )}
+        </div>
+
         <div className="flex gap-3 justify-center">
           <button
             onClick={handleRetry}
@@ -195,18 +255,35 @@ function Level3({ verse, onNext }) {
 
   return (
     <div>
-      <p className="text-sm text-gray-400 mb-2 text-center">Type the verse from memory</p>
-      <p className="text-blue-600 font-semibold text-center mb-6">{verse.reference}</p>
-      <textarea
-        value={input}
-        onChange={e => setInput(e.target.value)}
-        placeholder="Start typing the verse..."
-        rows={5}
-        className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 mb-4 resize-none"
-      />
+      <div className="bg-gray-100 rounded-lg p-4 text-center mb-6">
+        <p className="text-gray-500 text-sm font-medium">No hints — type the verse AND reference from memory</p>
+      </div>
+
+      <div className="mb-4">
+        <label className="text-xs text-gray-500 mb-1 block">Verse text</label>
+        <textarea
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          placeholder="Type the full verse from memory..."
+          rows={5}
+          className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+        />
+      </div>
+
+      <div className="mb-6">
+        <label className="text-xs text-gray-500 mb-1 block">Reference</label>
+        <input
+          type="text"
+          value={refInput}
+          onChange={e => setRefInput(e.target.value)}
+          placeholder="e.g. John 3:16"
+          className="w-full border border-gray-300 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+      </div>
+
       <button
         onClick={checkAnswer}
-        disabled={input.trim().length < 5}
+        disabled={input.trim().length < 3 || refInput.trim().length < 3}
         className="w-full bg-blue-600 text-white py-3 rounded-lg font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
       >
         Check my answer
@@ -216,23 +293,40 @@ function Level3({ verse, onNext }) {
 }
 
 function Level4({ verse, onNext }) {
-  const [input, setInput] = useState('')
+  const words = verse.text.split(' ')
+  const [scrambled] = useState(() => [...words].sort(() => Math.random() - 0.5))
+  const [selected, setSelected] = useState([])
+  const [used, setUsed] = useState([])
   const [result, setResult] = useState(null)
+  const [showVerse, setShowVerse] = useState(false)
+
+  const handleWordClick = (word, index) => {
+    if (used.includes(index)) return
+    setSelected(prev => [...prev, { word, index }])
+    setUsed(prev => [...prev, index])
+  }
+
+  const handleRemove = (index) => {
+    const item = selected[index]
+    setUsed(prev => prev.filter(i => i !== item.index))
+    setSelected(prev => prev.filter((_, i) => i !== index))
+  }
 
   const checkAnswer = () => {
+    const attempt = selected.map(s => s.word).join(' ')
     const normalize = str => str.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim()
-    const correct = normalize(verse.text)
-    const attempt = normalize(input)
-    const correctWords = correct.split(' ')
-    const attemptWords = attempt.split(' ')
+    const correctWords = normalize(verse.text).split(' ')
+    const attemptWords = normalize(attempt).split(' ')
     const matches = correctWords.filter((word, i) => word === attemptWords[i]).length
     const score = Math.round((matches / correctWords.length) * 100)
     setResult({ score, correct: score >= 90 })
   }
 
   const handleRetry = () => {
-    setInput('')
+    setSelected([])
+    setUsed([])
     setResult(null)
+    setShowVerse(false)
   }
 
   if (result) {
@@ -243,10 +337,24 @@ function Level4({ verse, onNext }) {
           {result.correct ? 'Mastered!' : 'Not quite!'}
         </h3>
         <p className="text-gray-500 mb-6">You got {result.score}% correct</p>
-        <div className="bg-blue-50 rounded-xl p-6 mb-8 text-left">
-          <p className="text-xs text-gray-400 mb-2">Correct verse:</p>
-          <p className="text-gray-800 italic">"{verse.text}"</p>
+
+        <div className="mb-6">
+          {showVerse ? (
+            <div className="bg-blue-50 rounded-xl p-6 text-left">
+              <p className="text-xs text-gray-400 mb-2">Correct verse:</p>
+              <p className="text-gray-800 italic">"{verse.text}"</p>
+              <p className="text-blue-600 font-semibold mt-2">{verse.reference}</p>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowVerse(true)}
+              className="w-full border border-blue-200 text-blue-600 py-2 rounded-lg text-sm font-medium hover:bg-blue-50 transition-colors"
+            >
+              Show verse
+            </button>
+          )}
         </div>
+
         <div className="flex gap-3 justify-center">
           <button
             onClick={handleRetry}
@@ -269,22 +377,52 @@ function Level4({ verse, onNext }) {
 
   return (
     <div>
-      <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-6 text-center mb-6">
-        <p className="text-xs text-purple-400 uppercase tracking-widest mb-2 font-semibold">Final Level — No Hints</p>
-        <p className="text-purple-700 font-bold text-2xl">{verse.reference}</p>
-        <p className="text-purple-400 text-sm mt-1">{verse.translation}</p>
+      <div className="bg-purple-50 border-2 border-purple-200 rounded-xl p-4 text-center mb-6">
+        <p className="text-xs text-purple-400 uppercase tracking-widest mb-1 font-semibold">Final Level — Word Puzzle</p>
+        <p className="text-purple-700 font-bold text-xl">{verse.reference}</p>
+        <p className="text-purple-400 text-xs mt-1">Tap the words in the correct order</p>
       </div>
-      <p className="text-sm text-gray-400 mb-3 text-center">Type the complete verse from memory — no hints!</p>
-      <textarea
-        value={input}
-        onChange={e => setInput(e.target.value)}
-        placeholder="Type the full verse from memory..."
-        rows={5}
-        className="w-full border-2 border-purple-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500 mb-4 resize-none"
-      />
+
+      {/* Selected words area */}
+      <div className="min-h-16 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200 p-3 mb-4 flex flex-wrap gap-2 items-start">
+        {selected.length === 0 && (
+          <p className="text-gray-300 text-sm w-full text-center mt-2">Your verse will appear here...</p>
+        )}
+        {selected.map((item, i) => (
+          <button
+            key={i}
+            onClick={() => handleRemove(i)}
+            className="bg-blue-100 text-blue-700 px-3 py-1 rounded-lg text-sm font-medium hover:bg-red-100 hover:text-red-600 transition-colors"
+            title="Click to remove"
+          >
+            {item.word}
+          </button>
+        ))}
+      </div>
+
+      <p className="text-xs text-gray-400 text-center mb-4">Click a word below to add it — click a selected word to remove it</p>
+
+      {/* Scrambled words */}
+      <div className="flex flex-wrap gap-2 justify-center mb-6">
+        {scrambled.map((word, i) => (
+          <button
+            key={i}
+            onClick={() => handleWordClick(word, i)}
+            disabled={used.includes(i)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              used.includes(i)
+                ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                : 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+            }`}
+          >
+            {word}
+          </button>
+        ))}
+      </div>
+
       <button
         onClick={checkAnswer}
-        disabled={input.trim().length < 5}
+        disabled={selected.length === 0}
         className="w-full bg-purple-600 text-white py-3 rounded-lg font-medium hover:bg-purple-700 transition-colors disabled:opacity-50"
       >
         Check my answer
@@ -292,6 +430,7 @@ function Level4({ verse, onNext }) {
     </div>
   )
 }
+
 
 export default function PracticeMode({ verse, onBack }) {
   const [currentLevel, setCurrentLevel] = useState(verse.level || 1)

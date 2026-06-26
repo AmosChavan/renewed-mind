@@ -158,21 +158,38 @@ function PassageText({ text, onSaveVerse }) {
     const selected = selection?.toString().trim()
 
     if (selected && selected.length > 3) {
-      const verseNumbers = selected.match(/\d+/g)
-      const firstVerse = verseNumbers?.[0]
-      const lastVerse = verseNumbers?.[verseNumbers.length - 1]
-
       const range = selection.getRangeAt(0)
       const rect = range.getBoundingClientRect()
+
+      // Only look at superscript verse numbers in the DOM
+      const allSups = Array.from(document.querySelectorAll('sup.text-blue-500'))
+
+      let startVerse = null
+      let endVerse = null
+
+      allSups.forEach(sup => {
+        const supRange = document.createRange()
+        supRange.selectNode(sup)
+
+        if (supRange.compareBoundaryPoints(Range.END_TO_START, range) <= 0) {
+          startVerse = sup.textContent.trim()
+        }
+
+        if (supRange.compareBoundaryPoints(Range.START_TO_END, range) <= 0) {
+          endVerse = sup.textContent.trim()
+        }
+      })
+
+      const verseRef = startVerse && endVerse && 
+        parseInt(endVerse) > parseInt(startVerse)
+        ? `${startVerse}-${endVerse}`
+        : startVerse || ''
+
       setSelectedText(selected)
-      setVerseRange(
-        firstVerse && lastVerse && firstVerse !== lastVerse
-          ? `${firstVerse}-${lastVerse}`
-          : firstVerse || ''
-      )
+      setVerseRange(verseRef)
       setPopup({
         x: rect.left + rect.width / 2,
-        y: rect.top  // no scrollY needed for fixed positioning
+        y: rect.top
       })
     } else {
       setPopup(null)
