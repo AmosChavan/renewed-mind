@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { supabase } from '../supabase'
 
 function Level1({ verse, onNext }) {
@@ -25,12 +25,49 @@ function Level2({ verse, onNext }) {
   const [checked, setChecked] = useState(false)
   const [score, setScore] = useState(null)
   const [showVerse, setShowVerse] = useState(false)
+  const inputRefs = useRef({})
 
   const normalize = str => str.toLowerCase().replace(/[^a-z]/g, '')
 
-  const handleInput = (i, value) => {
-    setInputs(prev => ({ ...prev, [i]: value }))
+  const getWordInputs = (i) => inputs[i] || []
+
+  const handleLetterInput = (wordIndex, letterIndex, value, clean) => {
+    const restLength = clean.length - 1
+    const current = getWordInputs(wordIndex)
+    const updated = [...current]
+    updated[letterIndex] = value.slice(-1)
+
+    setInputs(prev => ({ ...prev, [wordIndex]: updated }))
     setChecked(false)
+
+    if (value) {
+      if (letterIndex < restLength - 1) {
+        // Move to next letter in same word
+        const nextRef = inputRefs.current[`${wordIndex}-${letterIndex + 1}`]
+        if (nextRef) nextRef.focus()
+      } else {
+        // Last letter of word — find next word that has letters
+        let nextWordIndex = wordIndex + 1
+        while (nextWordIndex < words.length) {
+          const nextClean = words[nextWordIndex].replace(/[^a-zA-Z]/g, '')
+          if (nextClean.length > 1) {
+            const nextRef = inputRefs.current[`${nextWordIndex}-0`]
+            if (nextRef) { nextRef.focus(); break }
+          }
+          nextWordIndex++
+        }
+      }
+    }
+  }
+
+  const handleKeyDown = (wordIndex, letterIndex, e, clean) => {
+    if (e.key === 'Backspace') {
+      const current = getWordInputs(wordIndex)
+      if (!current[letterIndex] && letterIndex > 0) {
+        const prevRef = inputRefs.current[`${wordIndex}-${letterIndex - 1}`]
+        if (prevRef) prevRef.focus()
+      }
+    }
   }
 
   const checkAnswers = () => {
@@ -39,7 +76,7 @@ function Level2({ verse, onNext }) {
       const cleanWord = normalize(word)
       if (!cleanWord) { correct++; return }
       const restOfWord = cleanWord.slice(1)
-      const userInput = normalize(inputs[i] || '')
+      const userInput = (getWordInputs(i) || []).join('').toLowerCase()
       if (userInput === restOfWord) correct++
     })
     const pct = Math.round((correct / words.length) * 100)
@@ -47,48 +84,63 @@ function Level2({ verse, onNext }) {
     setChecked(true)
   }
 
+  const handleClear = () => {
+    setInputs({})
+    setChecked(false)
+    setScore(null)
+    setShowVerse(false)
+  }
+
   return (
     <div>
       <p className="text-sm text-gray-400 mb-6 text-center">
-        The first letter of each word is shown — type the rest
+        The first letter of each word is shown — fill in the rest
       </p>
       <div className="bg-yellow-50 rounded-xl p-6 mb-4">
-        <div className="flex flex-wrap gap-2 justify-center">
+        <div className="flex flex-wrap gap-x-3 gap-y-4 justify-center">
           {words.map((word, i) => {
             const clean = word.replace(/[^a-zA-Z]/g, '')
             const punct = word.replace(/[a-zA-Z]/g, '')
             const firstLetter = clean[0] || ''
-            const restLength = Math.max(clean.length - 1, 1)
-            const userVal = inputs[i] || ''
+            const restLength = Math.max(clean.length - 1, 0)
             const restOfWord = normalize(clean).slice(1)
-            const isCorrect = checked && normalize(userVal) === restOfWord
-            const isWrong = checked && userVal && normalize(userVal) !== restOfWord
+            const userInput = (getWordInputs(i) || []).join('').toLowerCase()
+            const isCorrect = checked && userInput === restOfWord
+            const isWrong = checked && userInput !== restOfWord
 
-            if (!clean) return <span key={i} className="text-gray-600">{word}</span>
+            if (!clean) return <span key={i} className="text-gray-600 self-end pb-1">{word}</span>
 
             return (
-              <div key={i} className="flex items-baseline gap-0.5">
-                <span className="font-bold text-gray-700 text-sm">{firstLetter}</span>
-                <input
-                  type="text"
-                  value={userVal}
-                  onChange={e => handleInput(i, e.target.value)}
-                  className={`py-0.5 text-sm border-b-2 bg-transparent outline-none transition-colors ${
-                    isCorrect
-                      ? 'border-green-500 text-green-700'
-                      : isWrong
-                      ? 'border-red-400 text-red-600'
-                      : 'border-gray-400 text-gray-800'
-                  }`}
-                  style={{ width: `${restLength * 10}px` }}
-                  placeholder={'_'.repeat(restLength)}
-                />
-                {punct && <span className="text-gray-600 text-sm">{punct}</span>}
+              <div key={i} className="flex items-end gap-0.5">
+                <span className={`font-bold text-sm pb-1 ${
+                  isCorrect ? 'text-green-600' : isWrong ? 'text-red-600' : 'text-gray-700'
+                }`}>
+                  {firstLetter}
+                </span>
+                {Array.from({ length: restLength }).map((_, j) => (
+                  <input
+                    key={j}
+                    ref={el => inputRefs.current[`${i}-${j}`] = el}
+                    type="text"
+                    maxLength={2}
+                    value={(getWordInputs(i) || [])[j] || ''}
+                    onChange={e => handleLetterInput(i, j, e.target.value, clean)}
+                    onKeyDown={e => handleKeyDown(i, j, e, clean)}
+                    className={`w-5 h-6 text-center text-sm border-b-2 bg-transparent outline-none transition-colors font-medium ${
+                      isCorrect
+                        ? 'border-green-500 text-green-600 bg-green-50'
+                        : isWrong
+                        ? 'border-red-500 text-red-600 bg-red-50'
+                        : 'border-gray-400 text-gray-800'
+                    }`}
+                  />
+                ))}
+                {punct && <span className="text-gray-600 text-sm pb-1">{punct}</span>}
               </div>
             )
           })}
         </div>
-        <p className="text-blue-600 font-semibold mt-4 text-center">{verse.reference}</p>
+        <p className="text-blue-600 font-semibold mt-5 text-center">{verse.reference}</p>
       </div>
 
       {checked && (
@@ -121,12 +173,7 @@ function Level2({ verse, onNext }) {
 
       <div className="flex gap-3 flex-wrap">
         <button
-          onClick={() => {
-            setInputs({})
-            setChecked(false)
-            setScore(null)
-            setShowVerse(false)
-          }}
+          onClick={handleClear}
           className="flex-1 bg-gray-100 text-gray-600 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
         >
           Clear & retry
